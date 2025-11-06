@@ -1,5 +1,5 @@
 # Persona Generation for Market Research
-| 시장 조사를 위한 소비자 페르소나 생성 방법론
+| 시장 조사를 위한 소비자 페르소나 생성 방법론.
 | 2025 동원 x 카이스트 AI Competition: Unlocking Future Sales & Demographics / 소비자 페르소나 기반 동원 신제품 월별 수요 예측
 https://dacon.io/competitions/official/236546/data
 
