@@ -1,149 +1,76 @@
-# Persona Generation for Market Research
-| 시장 조사를 위한 소비자 페르소나 생성 방법론.
-| 2025 동원 x 카이스트 AI Competition: Unlocking Future Sales & Demographics / 소비자 페르소나 기반 동원 신제품 월별 수요 예측
-https://dacon.io/competitions/official/236546/data
+## 🧠 LLM 기반 인구통계 메타프로필을 활용한 시뮬레이션: 소비자 페르소나 생성  
+*(LLM-powered Simulation using Demographic Meta-Profiles: Persona Generation)*  
 
+> 2025 동원 x 카이스트 AI Competition: **Unlocking Future Sales & Demographics** 출품작  
 
-This repository generates large batches of product-specific consumer personas (JSON) from (1) posterior segment weights and (2) a compact market context, using LLM prompts designed for two modes: Multiple-Choice (MC) and Swap (SWAP).
-The pipeline favors reproducible procedure/format/order: we seed randomness once per session, save prompts and batch logs, and keep a stable output schema.
+이 프로젝트는 **대규모 언어 모델(LLM)** 을 활용해  
+현실적이고 편향되지 않은, 그리고 **제품군 주구매자 중심의 소비자 페르소나를 대규모로 생성**하고,  
+이를 기반으로 **신제품 수요를 예측**하는 방법론을 제시합니다.  
 
-## Project Overview
+---
 
-This project generates large batches of **product-specific consumer personas** by combining:
+### 🎯 아이디어
 
-1) **Posterior segment weights** (`weights/{keyword}_posterior.json`) used to *sample* segment combinations (gender, age band, household size, income).  
-2) **Compact market context** (`data/contexts/{keyword}.json`) injected into prompts to ground personas in realistic market signals.
+기존 LLM 기반 페르소나 생성의 문제점(편향 증폭, 현실 괴리)과  
+무작위 샘플링의 비효율성을 해결하기 위해  
+본 프로젝트는 **사후분포(Posterior)** 를 활용한 **메타 프로필(Meta-Profile)** 접근법을 제안합니다.
 
-Two prompt modes are supported:
+#### 1️⃣ 현실 기반 메인 속성 샘플링 (메타 프로필 생성)
+1. **메인 속성**: 성별 / 연령대 / 가구소득 / 가구원수  
+   → 실제 통계청 인구주택총조사 표본 + 가계동향조사 데이터를 기반으로 1차 샘플링  
+2. 샘플 페르소나에 대해 1차 시뮬레이션(**Type A**) 수행 → 제품군 구매 반응률(Likelihood) 계산  
+3. **베이즈 정리(Bayes' theorem)** 를 적용해, 인구 분포(Prior)와 반응률(Likelihood)을 결합한 **사후분포(Posterior)** 도출  
+4. 이 사후분포의 가중치를 활용해 **주구매자 중심의 메인 속성 조합**을 재샘플링  
+   → 현실적인 시장 반영형 페르소나 집단 생성  
 
-- **Multiple Choice (MC)** — baseline demographic personas following a compact schema.  
-- **Swap (SWAP)** — richer personas that may include prior brand/product usage and purchase criteria.
+#### 2️⃣ LLM 기반 서브 속성 생성 (페르소나 완성)
+1. 샘플링된 메인 속성을 기반으로, LLM을 통해 ‘지역’, ‘직업’, ‘건강관심도’, ‘식료품구입빈도’ 등의 **서브 속성** 생성  
+2. **제품군 시장 컨텍스트** + **식품 소비 행동 결합분포 데이터**를 LLM에 제공  
+   → 현실적이고 논리적으로 일관된 페르소나 생성  
+3. LLM의 사고 과정(**Chain-of-Thought, CoT**)을 `reasoning` 필드로 함께 출력  
+   → 생성 과정의 투명성과 품질 확보  
 
+#### 3️⃣ MC / SWAP 모드 분리
+| 모드 | 설명 |
+| :--- | :--- |
+| **MC (Multiple Choice)** | 기존 제품군(참치캔, 참치액)에 대한 일반 시장 페르소나 생성 |
+| **SWAP (Switch Mode)** | 신제품(그릭요거트, 편의점커피라떼, 햄통조림) 전환 가능성 예측용. 경쟁 제품 사용자 속성을 포함하여 전환 확률 중심의 페르소나 생성 |
 
-## Batch prompting with pre/post-processing
+---
 
-- **Sampling (reproducible):** segment rows are sampled from posterior ratios.  
-- **Batch prompting:** rows are grouped into batches (e.g., 10) and sent in a single LLM call per batch to reduce cost/latency and keep context stable.  
-- **Per-batch logging:** every batch saves a raw JSON file under `output/{keyword}/personas_log/`; optional prompt snapshots go to `debug_prompts/`.  
-- **UUID handling & recovery:** if a batch returns fewer items or missing `uuid`s than expected, the missing entries are collected and **re-generated** into `personas_{keyword}_part_101.json`, `personas_{keyword}_part_102.json`, .. and then merged into the final output.  
-- **Final merge:** all valid batch results (+ recovered items) are consolidated into `output/{keyword}/personas_{keyword}_all.json`.
+### 🧩 데이터 구성
 
+| 데이터 종류 | 출처 / 활용 | 상세 내용 |
+| :--- | :--- | :--- |
+| **인구통계 데이터 (Prior)** | 통계청 MDIS (인구주택총조사 2% 표본, 2024 가계동향조사) | ‘성별’, ‘연령대’, ‘가구소득’, ‘가구원수’의 한국 인구 분포 계산 |
+| **식품 소비 행동 데이터** | 2024 식품소비행태조사 (5,851명) | 서브 속성 범주 정의 및 메인 속성과의 결합분포를 LLM 컨텍스트로 제공 |
+| **시장/제품 데이터 (Context)** | 뉴스, aT FIS 식품산업통계정보, 네이버 쇼핑인사이트 API | 제품군 시장 규모, 트렌드, 유사 제품 정보 제공 → LLM 페르소나 생성의 맥락 강화 |
+| **시뮬레이션 결과 (Likelihood)** | Type A 시뮬레이션 | 메인 속성별 제품 구매 반응률(Likelihood) 계산 → Posterior 계산에 활용 |
 
-## Project Structure
+---
 
-```
-persona_process/
-├─ data/
-│  └─ contexts/                  # Market context per keyword (e.g., 그릭요거트.json)
-├─ output/
-│  ├─ personas_{keyword}_all.json   # Final merged personas
-│  └─ logs/
-│      └─{keyword}/
-│           ├─ personas_log/           # Raw per-batch responses (JSON)
-│           ├─ debug_prompts/          # (opt) saved system/user prompts per batch
-├─ prompts/
-│  ├─ prompt_mc.py               # MC prompt & schema
-│  └─ prompt_sw.py               # SWAP prompt & schema
-├─ weights/
-│  └─ {keyword}_posterior.json   # Posterior probabilities for sampling
-├─ generate_personas.py          # Main CLI
-├─ requirements.txt
-└─ .env                          # OpenAI API key (local only)
-```
+### 🧍‍♀️ 페르소나 예시 (그릭요거트 / SWAP 모드)
 
-## Installation & Setup
-
-### 1. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Environment Configuration
-
-Create a `.env` file in the project root with your OpenAI API key:
-
-```bash
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-## Usage
-
-### Multiple Choice(MC) Mode
-
-The **MC mode** generates personas based primarily on **overall market context** (demographics + market report) for a given product group.  
-It is suitable for products where **broad consumer traits** are more relevant than individual prior brand usage.  
-
-**Applicable product groups:** `참치액`, `참치캔`
-
-```powershell
-python .\generate_personas.py `
-  --mode mc `
-  --keywords 참치액 `
-  --n_samples 1000 `
-  --batch_size 10 `
-  --model gpt-4o-mini `
-  --temperature 0.2 `
-  --log_level DEBUG `
-  --log_prompts `
-  --prompt_preview_chars 600
-```
-
-```powershell
-python .\generate_personas.py `
-  --mode mc `
-  --keywords 참치캔 `
-  --n_samples 1000 `
-  --batch_size 10 `
-  --model gpt-4o-mini `
-  --temperature 0.2 `
-  --log_level DEBUG `
-  --log_prompts `
-  --prompt_preview_chars 600
-```
-
-### SWAP(SW) Mode
-
-The **SWAP mode** generates personas by combining **overall market context** with **prior product/brand usage patterns**.
-This mode enriches personas with substitution/switching behavior and is more suitable for categories with **brand competition**.
-
-**Applicable product groups:** `그릭요거트`, `편의점커피라떼`, `스팸`
-
-```powershell
-python .\generate_personas.py `
-  --mode swap `
-  --keywords 그릭요거트 `
-  --n_samples 1000 `
-  --batch_size 10 `
-  --model gpt-4o-mini `
-  --temperature 0.2 `
-  --log_level DEBUG `
-  --log_prompts `
-  --prompt_preview_chars 600
-```
-
-```powershell
-python .\generate_personas.py `
-  --mode swap `
-  --keywords 편의점커피라떼 `
-  --n_samples 1000 `
-  --batch_size 10 `
-  --model gpt-4o-mini `
-  --temperature 0.2 `
-  --log_level DEBUG `
-  --log_prompts `
-  --prompt_preview_chars 600
-```
-
-```powershell
-python .\generate_personas.py `
-  --mode swap `
-  --keywords 스팸 `
-  --n_samples 1000 `
-  --batch_size 10 `
-  --model gpt-4o-mini `
-  --temperature 0.2 `
-  --log_level DEBUG `
-  --log_prompts `
-  --prompt_preview_chars 600
-```
+```json
+{
+    "uuid": "829032",
+    "segment_key_input": "고소득(월 700만원 이상)-만 19~29세-3인가구 이상-여성",
+    "reasoning": "이 페르소나는 20대 초반의 고소득 여성으로, 건강과 다이어트에 관심이 많습니다. 풀무원 그릭요거트 400g을 사용하며, 간편한 아침식사로 자주 섭취합니다.",
+    "기존사용제품": "풀무원 그릭요거트 400g",
+    "가구소득": "고소득(월 700만원 이상)",
+    "연령대": "만 19~29세",
+    "가구원수": "3인가구 이상",
+    "성별": "여성",
+    "지역": "서울특별시",
+    "교육수준": "대졸(전문대졸/대학원생 포함)",
+    "직업": "대학생/대학원생(휴학생 포함)",
+    "건강관심도": "매우 그렇다",
+    "가구요리빈도": "보통",
+    "주거형태": "아파트",
+    "건강투자정도": "매우 그렇다",
+    "운동여부": "예",
+    "sns사용빈도": "자주 사용한다",
+    "식료품구입빈도": "주 2~3회",
+    "1회평균식료품구입금액": 10000,
+    "우유구입기준": "영양(건강)"
+}
