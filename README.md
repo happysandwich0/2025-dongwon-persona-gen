@@ -73,3 +73,7 @@
     "1회평균식료품구입금액": 10000,
     "우유구입기준": "영양(건강)"
 }
+
+## 📚 References
+
+Li, A., Chen, H., Namkoong, H., & Peng, T. (2025). LLM Generated Persona is a Promise with a Catch. arXiv. DOI: 10.48550/arXiv,2503.16527
